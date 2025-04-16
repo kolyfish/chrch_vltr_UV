@@ -2,69 +2,57 @@ from sqlmodel import Field, SQLModel, Relationship
 from datetime import datetime, date
 from typing import Optional, List
 
+from sqlmodel import Session
 
-# 志工資料表
-class Volunteer(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    name: str
-    email: str
-    phone: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    is_active: bool = True
-
-    skills: List["VolunteerSkill"] = Relationship(back_populates="volunteer")
-    availabilities: List["VolunteerAvailability"] = Relationship(back_populates="volunteer")
-    schedules: List["VolunteerSchedule"] = Relationship(back_populates="volunteer")
+from typing import Optional, List
+from sqlmodel import SQLModel, Field, Relationship
 
 
-# 服務類型資料表
-class ServiceType(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    name: str
-    description: Optional[str] = None
-    required_volunteers: int  # 每日需要的志工數量
-
-    volunteer_skills: List["VolunteerSkill"] = Relationship(back_populates="service_type")
-    schedules: List["VolunteerSchedule"] = Relationship(back_populates="service_type")
-
-
-# 志工技能資料表，多對多關聯志工與服務類型
+# 志工技能表 (VolunteerSkill) 用於記錄技能類型
 class VolunteerSkill(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    volunteer_id: int = Field(foreign_key="volunteer.id")
-    service_type_id: int = Field(foreign_key="servicetype.id")
+    name: str = Field(index=True)  # 技能名稱，例如 "司琴"
+    description: Optional[str] = None  # 技能的描述或補充說明
 
-    volunteer: Volunteer = Relationship(back_populates="skills")
-    service_type: ServiceType = Relationship(back_populates="volunteer_skills")
+    # 關聯
+    volunteers: List["Volunteer"] = Relationship(back_populates="skills")
+    service_types: List["ServiceType"] = Relationship(back_populates="related_skills")
 
 
-# 服務日期資料表
-class ServiceDate(SQLModel, table=True):
+# 志工表 (Volunteer)
+class Volunteer(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    service_date: date = Field(sa_column_kwargs={"unique": True})
-    note: Optional[str] = None
+    name: str = Field(index=True)  # 志工姓名
 
-    schedules: List["VolunteerSchedule"] = Relationship(back_populates="service_date")
+    # 與技能的多對多關聯
+    skills: List[VolunteerSkill] = Relationship(back_populates="volunteers")
+
+    # 與排班表的關聯
+    schedules: List["Schedule"] = Relationship(back_populates="volunteer")
 
 
-# 志工排班資料表，每次服務的排班紀錄
-class VolunteerSchedule(SQLModel, table=True):
+# 服侍類表 (ServiceType)
+class ServiceType(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    volunteer_id: int = Field(foreign_key="volunteer.id")
-    service_type_id: int = Field(foreign_key="servicetype.id")
-    service_date_id: int = Field(foreign_key="servicedate.id")
-    status: str = "scheduled"  # 可用值例如 scheduled, cancelled, completed...
+    name: str = Field(index=True)  # 服侍名稱，例如 "司琴"
+    description: Optional[str] = None  # 服侍類型的描述
 
-    volunteer: Volunteer = Relationship(back_populates="schedules")
-    service_type: ServiceType = Relationship(back_populates="schedules")
-    service_date: ServiceDate = Relationship(back_populates="schedules")
+    # 與技能的多對多關聯
+    related_skills: List[VolunteerSkill] = Relationship(back_populates="service_types")
+
+    # 與排班表的關聯
+    schedules: List["Schedule"] = Relationship(back_populates="service_type")
 
 
-# 志工每週可用性資料表
-class VolunteerAvailability(SQLModel, table=True):
+# 排班表 (Schedule)
+class Schedule(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    volunteer_id: int = Field(foreign_key="volunteer.id")
-    day_of_week: int  # 0~6 對應週一~週日
-    is_available: bool = True
+    date: str = Field(index=True)  # 排班日期
 
-    volunteer: Volunteer = Relationship(back_populates="availabilities")
+    # 與志工的多對一關聯
+    volunteer_id: Optional[int] = Field(default=None, foreign_key="volunteer.id")
+    volunteer: Optional[Volunteer] = Relationship(back_populates="schedules")
+
+    # 與服侍類的多對一關聯
+    service_type_id: Optional[int] = Field(default=None, foreign_key="servicetype.id")
+    service_type: Optional[ServiceType] = Relationship(back_populates="schedules")
